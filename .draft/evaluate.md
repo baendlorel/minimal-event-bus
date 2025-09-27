@@ -1,42 +1,43 @@
-# EventBus 代码评估
+# EventBus 代码评估 (Updated)
 
-## 可以精简的地方
+## 改进已完成的地方
 
-### 1. `$define` 变量名不够清晰
+### ✅ 修复的问题
+
+1. **限制监听器Bug已修复**
+   - 之前的问题：在限制次数用完时返回 `true` 而不是执行原函数
+   - 现在的实现：正确先执行原函数，再检查是否需要移除
+
+2. **内存泄漏问题已解决**
+   - 增加了 `_cleanList` 来处理限制监听器的清理
+   - 在 `off` 方法中正确清理 `_limitMap`
+
+3. **移除了过度设计**
+   - 删除了复杂的 `wrap` 函数
+   - 简化了 getter 方法的实现
+
+## 仍可精简的地方
+
+### 1. 注释仍然过于详细
 
 ```typescript
-const $define = Object.defineProperties;
+/**
+ * Using `Map` because:
+ * 1. under 1e6 keys, `Map` has the almost same memory usage as `Object.create(null)`
+ *    - under 1000, `Map` is 2 times less
+ * 2. `Map` is much faster(about 4~5 times).
+ *    - both 1e6 key-value pairs, iterate 1e6 times,null object takes 200ms at average while `Map` takes only 40ms.
+ *    - both 10 key-value pairs, iterate 1e6 times,null object takes 40ms at average while `Map` takes only 12ms.
+ */
 ```
 
-**问题：** 变量名 `$define` 不够直观，且实际使用的是 `Object.defineProperties` 而不是 `Object.defineProperty`
-**建议：**
-
-- 重命名为更清晰的名字如 `defineProps` 或直接使用 `Object.defineProperties`
-- 或者如果只需要单个属性定义，改用 `Object.defineProperty`
-
-### 2. `wrap` 函数可能过度设计
+**建议：** 对于"极简"库，这些性能细节可以简化为：
 
 ```typescript
-export function wrap<T extends AnyFn>(thisArg: any, target: T): T {
-  const fn = ((...args) => target.apply(thisArg, args)) as T;
-  $define(fn, {
-    length: { value: target.length, configurable: true },
-    name: { value: target.name, configurable: true },
-  });
-  return fn;
-}
+// Using Map for better performance and memory efficiency
 ```
 
-**问题：**
-
-- 这个函数是 exported，但似乎只在内部使用
-- 函数名 `wrap` 太通用，容易与其他库冲突
-- 长篇注释解释为什么不用 `.bind()`，但对于"极简"库来说可能过度
-  **建议：**
-- 考虑内联到使用的地方，或者不导出
-- 如果保留，重命名为更具体的名字如 `createBoundMethod`
-
-### 3. `_getListeners` 方法可以简化
+### 2. `_getListeners` 方法仍可简化
 
 ```typescript
 private _getListeners(event: keyof T): T[keyof T][] {
@@ -51,7 +52,7 @@ private _getListeners(event: keyof T): T[keyof T][] {
 }
 ```
 
-**建议精简为：**
+**建议简化为：**
 
 ```typescript
 private _getListeners(event: keyof T): T[keyof T][] {
@@ -64,100 +65,128 @@ private _getListeners(event: keyof T): T[keyof T][] {
 }
 ```
 
-### 4. 类型定义可以更简洁
+### 3. 默认泛型参数可能不必要
 
 ```typescript
 export class EventBus<T extends Record<string, AnyFn> = Record<string, AnyFn>>
 ```
 
-**建议：** 默认泛型参数可能不必要，因为用户几乎总是会提供具体类型
+**建议：** 可以简化为 `export class EventBus<T extends Record<string, AnyFn>>`
 
-### 5. 注释过多
+## 仍存在的问题
 
-对于一个"极简"库来说，有些注释过于详细，比如：
-
-- `Map` 性能比较的详细数据
-- `wrap` 函数的性能解释
-- 可以保留核心功能说明，简化性能细节
-
-## 不足和问题
-
-### 1. 限制监听器的实现有Bug
+### 1. 清理逻辑的性能问题
 
 ```typescript
-if (count <= 0) {
-  const index = listeners.indexOf(listener);
-  if (index !== -1) {
-    listeners.splice(index, 1);
-    return true; // 这里返回 true 而不是执行原函数
-  }
+this._listeners.set(
+  event,
+  listeners.filter((fn) => !this._cleanList.has(fn))
+);
+```
+
+**问题：** 每次 `emit` 都会创建新数组，即使没有需要清理的监听器
+**建议：** 只在确实需要清理时才执行过滤操作
+
+### 2. 类型安全问题
+
+```typescript
+const origin = this._limitMap.get(listener);
+if (origin) {
+  listener = origin as T[K];
 }
 ```
 
-**问题：** 当限制次数用完时，返回 `true` 而不是调用原函数的返回值
-**修复：** 应该在移除监听器后仍然执行并返回原函数的结果
+**问题：** 类型断言可能不安全
+**建议：** 使用更安全的类型检查
 
-### 2. 限制监听器的逻辑时机问题
-
-**问题：** 先检查 `count <= 0` 再递减，意味着 `limit: 1` 的监听器实际上会被调用 1 次，但 `limit: 0` 的监听器永远不会被调用
-**建议：** 重新考虑逻辑顺序，使其更直观
-
-### 3. 内存泄漏风险
-
-**问题：** `_limitMap` 中的映射关系在监听器移除后没有清理
-**建议：** 在 `off` 方法中清理 `_limitMap`
-
-### 4. 类型安全问题
+### 3. 注释不完整
 
 ```typescript
-fn = (this._limitMap.get(fn) || fn) as T[K];
+/**
+ * @returns the index of the listener in the internal array
+ * - be aware that the index is not always
+ */
 ```
 
-**问题：** 强制类型转换可能不安全
-**建议：** 增加类型检查或使用更安全的类型守卫
+**问题：** 注释被截断，"is not always" 后面应该说什么
 
-### 5. `emit` 方法的返回值类型不够精确
+### 4. 错误处理仍然不足
+
+**问题：** 没有处理监听器函数执行时抛出异常的情况
+**影响：** 一个监听器出错会阻止后续监听器执行和结果返回
+
+## 新的改进建议
+
+### 1. 优化清理逻辑
 
 ```typescript
-emit<K extends keyof T, R = ReturnType<T[K]>>(event: K, ...args: Parameters<T[K]>): R[]
+emit<K extends keyof T, R = ReturnType<T[K]>>(event: K, ...args: Parameters<T[K]>): R[] {
+  const listeners = this._listeners.get(event);
+  if (!listeners || listeners.length === 0) {
+    return [];
+  }
+
+  const result = listeners.map((fn) => fn(...args));
+
+  // 只在有需要清理的监听器时才执行过滤
+  if (this._cleanList.size > 0) {
+    const hasCleanable = listeners.some(fn => this._cleanList.has(fn));
+    if (hasCleanable) {
+      this._listeners.set(
+        event,
+        listeners.filter((fn) => !this._cleanList.has(fn))
+      );
+    }
+    this._cleanList.clear();
+  }
+
+  return result;
+}
 ```
 
-**问题：** `R` 类型推断可能不准确，特别是在有多个不同返回值的监听器时
-**建议：** 考虑使用更精确的类型推断或联合类型
+### 2. 改进类型安全
 
-### 6. 错误处理不足
+```typescript
+off<K extends keyof T>(event: K, listener?: T[K]): boolean {
+  if (!listener) {
+    return this._listeners.delete(event);
+  }
+  const listeners = this._listeners.get(event);
+  if (!listeners) {
+    return false;
+  }
 
-**问题：**
+  // 更安全的类型处理
+  const actualListener = this._limitMap.get(listener) ?? listener;
 
-- 没有处理监听器函数执行时抛出异常的情况
-- 一个监听器出错会阻止后续监听器执行
-  **建议：** 考虑是否需要错误隔离机制
+  const index = listeners.indexOf(actualListener);
+  if (index !== -1) {
+    listeners.splice(index, 1);
+    // 清理 limitMap
+    if (this._limitMap.has(listener)) {
+      this._limitMap.delete(listener);
+    }
+    return true;
+  }
 
-### 7. 性能优化可能过度
+  return false;
+}
+```
 
-**问题：**
+## 总体评价
 
-- `wrap` 函数的复杂实现可能不值得，除非有明确的性能测试数据支持
-- 对于大多数使用场景，简单的 `.bind()` 可能已经足够
+### 改进程度：⭐⭐⭐⭐☆
 
-## 总体建议
+- ✅ 主要Bug已修复
+- ✅ 内存泄漏已解决
+- ✅ 过度设计已简化
+- ⚠️ 仍有性能和类型安全改进空间
+- ⚠️ 错误处理仍需考虑
 
-### 代码简化优先级
+### 建议优先级
 
-1. **高优先级：** 修复限制监听器的bug
-2. **中优先级：** 简化 `_getListeners` 方法，清理 `_limitMap` 内存泄漏
-3. **低优先级：** 重新考虑 `wrap` 函数的必要性，简化注释
+1. **高优先级：** 完善注释，修复截断的文档
+2. **中优先级：** 优化清理逻辑性能，改进类型安全
+3. **低优先级：** 简化过详细的注释
 
-### 保持极简原则
-
-- 移除或内联只有内部使用的导出函数
-- 简化过于详细的性能说明注释
-- 考虑是否所有getter方法都必要
-
-### 类型安全改进
-
-- 改进类型推断的准确性
-- 减少不必要的类型断言
-- 增加更好的类型守卫
-
-这个评估基于"极简事件总线"的设计目标，重点关注代码简洁性、性能和正确性的平衡。
+当前的实现已经很好地平衡了功能性和简洁性，主要问题都已解决。

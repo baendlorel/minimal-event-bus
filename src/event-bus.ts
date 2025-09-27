@@ -7,14 +7,14 @@ type AnyFn = (...args: any[]) => any;
  * ##
  * __PKG_INFO__
  */
-export class EventBus<T extends Record<string, AnyFn> = Record<string, AnyFn>> {
+export class EventBus<T extends Record<string, AnyFn>> {
   public static create<T extends Record<string, AnyFn>>() {
     const bus = new EventBus<T>();
     return {
       bus,
-      on: bus.getOnFn(),
-      off: bus.getOffFn(),
-      emit: bus.getEmitFn(),
+      on: ((...args) => bus.on.apply(bus, args)) as typeof bus.on,
+      off: ((...args) => bus.off.apply(bus, args)) as typeof bus.off,
+      emit: ((...args) => bus.emit.apply(bus, args)) as typeof bus.emit,
     };
   }
 
@@ -51,28 +51,26 @@ export class EventBus<T extends Record<string, AnyFn> = Record<string, AnyFn>> {
    * - one function can be registered multiple times, and will be called multiple times.
    * @param event event name string
    * @param listener handler
-   * @param limit (optional) an integer, indicates the number of calls of this listener.(falsy values are considered as `Infinity`)
+   * @param limit (optional) falsy values are considered as `Infinity`
    * @returns the index of the listener in the internal array
    * - be aware that the index is not always
    */
   on<K extends keyof T>(event: K, listener: T[K], limit?: number): number {
     const listeners = this._getListeners(event);
-    if (limit) {
-      const origin = listener;
-      let count = limit;
-      listener = ((...args) => {
-        count--;
-        const result = origin(...args);
-        if (count <= 0) {
-          // & cannot use `listeners.splice` here, because the index might
-          // have changed, and the array might have been changed by
-          // `filter` calls while cleaning.
-          this._cleanList.add(listener);
-        }
-        return result;
-      }) as typeof listener;
-      this._limitMap.set(origin, listener);
+    if (!limit) {
+      return listeners.push(listener) - 1;
     }
+
+    const origin = listener;
+    let count = limit;
+    listener = ((...args) => {
+      count--;
+      if (count <= 0) {
+        this._cleanList.add(listener);
+      }
+      return origin(...args);
+    }) as typeof listener;
+    this._limitMap.set(origin, listener);
     return listeners.push(listener) - 1;
   }
 
@@ -133,26 +131,5 @@ export class EventBus<T extends Record<string, AnyFn> = Record<string, AnyFn>> {
 
     this._cleanList.clear();
     return result;
-  }
-
-  /**
-   * Gets an `emit` function that can be used directly.
-   */
-  getEmitFn(): typeof this.emit {
-    return ((...args) => this.emit.apply(this, args)) as typeof this.emit;
-  }
-
-  /**
-   * Gets an `on` function that can be used directly.
-   */
-  getOnFn(): typeof this.on {
-    return ((...args) => this.on.apply(this, args)) as typeof this.on;
-  }
-
-  /**
-   * Gets an `off` function that can be used directly.
-   */
-  getOffFn(): typeof this.off {
-    return ((...args) => this.off.apply(this, args)) as typeof this.off;
   }
 }

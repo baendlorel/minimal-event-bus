@@ -5,14 +5,16 @@
 
 A ultra-lightweight, type-safe event bus for TypeScript/JavaScript with zero runtime validation - relying purely on TypeScript's compile-time type checking for safety and performance.
 
+For more awesome packages, check out [my homepage💛](https://baendlorel.github.io/?repoType=npm)
+
 ## Features
 
 - **🔥 Minimal**: Extremely small footprint with no runtime overhead
-- **⏱️ Fast**: No runtime argument validation - trusts TypeScript's type system
+- **⏱️ Fast**: No runtime argument validation - trusts that you will use xxlint or TypeScript's type system to check.
 - **🔒 Type Safe**: Full TypeScript support with compile-time type checking
 - **🎯 Zero Dependencies**: No external dependencies
 - **📦 Tree Shakeable**: ES modules with clean exports
-- **🔧 Flexible**: Supports limited listeners, function extraction, and more
+- **🔧 Flexible**: Supports limited listeners, function extraction
 
 ## Installation
 
@@ -27,9 +29,6 @@ pnpm add minimal-event-bus
 ```typescript
 import { EventBus } from 'minimal-event-bus';
 
-// Define your event types
-// Warning! Here you must use type, not interface. or you will get an error(about "Cannot use xxx as an index").
-// If you add [K: string]: xxx, then there will be no auto-complete for event names when you calls `emit`/`on`.
 type Events = {
   userLogin: (userId: string, timestamp: Date) => void;
   userLogout: (userId: string) => void;
@@ -38,184 +37,106 @@ type Events = {
 
 // Create event bus
 const bus = new EventBus<Events>();
+// or
+const { bus, on, off, emit } = EventBus.create<Events>();
 
 // Register listeners
-bus.on('userLogin', (userId, timestamp) => {
+bus.on('user-login', (userId, timestamp) => {
   console.log(`User ${userId} logged in at ${timestamp}`);
 });
 
 // Emit events
-bus.emit('userLogin', 'user123', new Date());
+bus.emit('user-login', 'user123', new Date());
 ```
 
 ## API Reference
 
 ### `EventBus<T>`
 
-#### `new EventBus<T>()`
+Create a type-safe event bus where `T` defines your event signatures.
 
-Create a new event bus instance with typed events.
+> Here you may use `type` instead of `interface`, or you will get an error(about "Cannot use xxx as an index").
 
-#### `on<K>(event: K, listener: T[K], limit?: number): number`
+```typescript
+type MyEvents = {
+  'user-login': (userId: string, timestamp: Date) => void;
+  update: (data: any[]) => number;
+};
+
+const bus = new EventBus<MyEvents>();
+
+// Then you type
+bus.emit('' <- Here VS Code will pop the list of 'user-login' and 'update', ...)
+```
+
+### `EventBus.create<T>(): { bus: EventBus<T>, on: Function, off: Function, emit: Function }`
+
+Factory method that creates an event bus and returns both the instance and standalone functions.
+
+```typescript
+const { bus, on, off, emit } = EventBus.create<MyEvents>();
+
+// Use standalone functions
+on('userLogin', (userId) => console.log(userId));
+emit('userLogin', 'user123', new Date());
+
+// Or use the bus instance
+bus.on('dataUpdate', () => {});
+```
+
+This is convenient when you primarily want to use the functions directly rather than the instance methods.
+
+### `on<K>(event: K, listener: T[K], limit?: number): number`
 
 Register a listener for the given event.
 
-- `event`: Event name
-- `listener`: Event handler function
-- `limit`: (optional) Maximum number of times the listener can be called
-- Returns: Index of the listener in the internal array
+**Parameters:**
 
-```typescript
-const index = eventBus.on('userLogin', (userId) => {
-  console.log('User logged in:', userId);
-});
+- `event` - Event name (must be a key of `T`)
+- `listener` - Event handler function matching the signature defined in `T`
+- `limit` _(optional)_ - Maximum number of times this listener can be called. Falsy values are treated as unlimited.
 
-// Limited listener - only called 3 times
-eventBus.on(
-  'dataUpdate',
-  (data) => {
-    console.log('Data updated:', data);
-  },
-  3
-);
-```
+**Returns:** The index of the listener in the internal array.
 
-#### `off<K>(event: K, listener?: T[K]): boolean`
+**Note:**
+
+- One function can be registered multiple times and will be called multiple times
+- Limited listeners are automatically removed after reaching their call limit
+- The returned index may change when other listeners are removed
+
+### `off<K>(event: K, listener?: T[K]): boolean`
 
 Remove a listener for the given event.
 
-- `event`: Event name
-- `listener`: (optional) Specific handler to remove. If omitted, removes all listeners for the event
-- Returns: `true` if successfully removed, `false` otherwise
+**Parameters:**
 
-```typescript
-const handler = (userId: string) => console.log(userId);
-eventBus.on('userLogin', handler);
-eventBus.off('userLogin', handler); // Remove specific listener
-eventBus.off('userLogin'); // Remove all listeners for event
-```
+- `event` - Event name
+- `listener` _(optional)_ - Specific listener to remove. If omitted, removes all listeners for the event
 
-#### `emit<K>(event: K, ...args: Parameters<T[K]>): ReturnType<T[K]>[]`
+**Returns:** `true` if successfully removed, `false` if not found or event doesn't exist.
+
+**Note:**
+
+- If a listener is registered multiple times, only the first occurrence is removed
+- For limited listeners, use the original function reference (not the wrapped one)
+
+### `emit<K>(event: K, ...args: Parameters<T[K]>): ReturnType<T[K]>[]`
 
 Trigger all listeners for the given event.
 
-- `event`: Event name
-- `args`: Arguments to pass to the listeners
-- Returns: Array of return values from each listener
+**Parameters:**
 
-```typescript
-const results = eventBus.emit('userLogin', 'user123', new Date());
-```
+- `event` - Event name
+- `...args` - Arguments to pass to all listeners (must match the signature defined in `T`)
 
-#### `getEmitFn(): typeof this.emit`
+**Returns:** Array of return values from each listener in registration order.
 
-Get a wrapped `emit` function that can be used independently.
+**Note:**
 
-```typescript
-const emit = eventBus.getEmitFn();
-emit('userLogin', 'user123', new Date());
-```
-
-#### `getOnFn(): typeof this.on`
-
-Get a wrapped `on` function that can be used independently.
-
-#### `getOffFn(): typeof this.off`
-
-Get a wrapped `off` function that can be used independently.
-
-### Static Methods
-
-#### `EventBus.create<T>()`
-
-Create an event bus with extracted functions for convenience.
-
-```typescript
-const { bus, emit, on, off } = EventBus.create<Events>();
-
-on('userLogin', (userId) => console.log(userId));
-emit('userLogin', 'user123');
-```
-
-## Performance Philosophy
-
-This library prioritizes performance and minimal footprint over runtime safety. It **trusts TypeScript's type system completely** and performs **no runtime argument validation**. This design choice results in:
-
-- **Zero runtime overhead** from type checking
-- **Minimal bundle size**
-- **Maximum performance**
-
-If you need runtime validation, consider other event bus libraries. This library is perfect when you want type safety without runtime costs.
-
-## Advanced Usage
-
-### Limited Listeners
-
-```typescript
-// This listener will only be called 5 times
-eventBus.on(
-  'apiCall',
-  (response) => {
-    console.log('API response:', response);
-  },
-  5
-);
-```
-
-### Multiple Listeners
-
-```typescript
-// Same function can be registered multiple times
-const handler = () => console.log('Called');
-eventBus.on('test', handler);
-eventBus.on('test', handler); // Will be called twice on emit
-```
-
-### Return Values
-
-```typescript
-interface Events {
-  calculate: (a: number, b: number) => number;
-}
-
-const eventBus = new EventBus<Events>();
-
-eventBus.on('calculate', (a, b) => a + b);
-eventBus.on('calculate', (a, b) => a * b);
-
-const results = eventBus.emit('calculate', 5, 3);
-console.log(results); // [8, 15]
-```
-
-## TypeScript Support
-
-Full TypeScript support with strict type checking:
-
-```typescript
-type Events = {
-  stringEvent: (message: string) => void;
-  numberEvent: (count: number) => string;
-};
-
-const eventBus = new EventBus<Events>();
-
-// ✅ Type safe
-eventBus.on('stringEvent', (message) => console.log(message));
-eventBus.emit('stringEvent', 'Hello World');
-
-// ❌ TypeScript error - wrong argument type
-eventBus.emit('stringEvent', 123);
-
-// ❌ TypeScript error - wrong event name
-eventBus.emit('wrongEvent', 'test');
-```
+- Returns empty array if no listeners are registered
+- Limited listeners that reach their limit are cleaned up after execution
+- If a listener throws an error, subsequent listeners won't be called
 
 ## License
 
 MIT
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-For more awesome packages, check out [my homepage💛](https://baendlorel.github.io/?repoType=npm)
