@@ -32,7 +32,7 @@ export class EventBus<T extends Record<string, AnyFn>> {
   /**
    * For listeners with calling limit. Make them able to call `off` with the original function reference.
    */
-  private readonly _limitMap = new Map<AnyFn, AnyFn>();
+  private readonly _limitMap = new Map<T[keyof T], T[keyof T]>();
 
   private _getListeners(event: keyof T): T[keyof T][] {
     const listeners = this._listeners.get(event);
@@ -50,7 +50,7 @@ export class EventBus<T extends Record<string, AnyFn>> {
    * - one function can be registered multiple times, and will be called multiple times.
    * @param event event name string
    * @param listener handler
-   * @param limit (optional) limit the number of calls of this listener. When it reaches 0, will call `off` automatically.
+   * @param limit (optional) an integer, indicates the number of calls of this listener.
    * @returns the index of the listener in the internal array
    * - this can be used to locate the return value of `emit`
    * - be aware that the index of the listener will change when you use `off`
@@ -72,6 +72,7 @@ export class EventBus<T extends Record<string, AnyFn>> {
         count--;
         return origin(...args);
       }) as typeof listener;
+      this._limitMap.set(origin, listener);
     }
     return listeners.push(listener) - 1;
   }
@@ -87,11 +88,12 @@ export class EventBus<T extends Record<string, AnyFn>> {
     if (!fn) {
       return this._listeners.delete(event);
     }
-
     const listeners = this._listeners.get(event);
     if (!listeners) {
       return false;
     }
+
+    fn = (this._limitMap.get(fn) || fn) as T[K];
 
     const index = listeners.indexOf(fn);
     if (index !== -1) {
@@ -119,28 +121,34 @@ export class EventBus<T extends Record<string, AnyFn>> {
 
   /**
    * Gets a wrapped `emit` function that can be used directly.
+   * - `name` and `length` are preserved.
    */
   getEmitFn(): typeof this.emit {
     const emit: typeof this.emit = (...args) => this.emit(...args);
     $define(emit, 'length', { value: this.emit.length, configurable: true });
+    $define(emit, 'name', { value: 'emit', configurable: true });
     return emit;
   }
 
   /**
    * Gets a wrapped `on` function that can be used directly.
+   * - `name` and `length` are preserved.
    */
   getOnFn(): typeof this.on {
     const on: typeof this.on = (...args) => this.on(...args);
     $define(on, 'length', { value: this.on.length, configurable: true });
+    $define(on, 'name', { value: 'on', configurable: true });
     return on;
   }
 
   /**
    * Gets a wrapped `off` function that can be used directly.
+   * - `name` and `length` are preserved.
    */
   getOffFn(): typeof this.off {
     const off: typeof this.off = (...args) => this.off(...args);
     $define(off, 'length', { value: this.off.length, configurable: true });
+    $define(off, 'name', { value: 'off', configurable: true });
     return off;
   }
 }
