@@ -1,27 +1,5 @@
 type AnyFn = (...args: any[]) => any;
 
-const $define = Object.defineProperties;
-
-/**
- * OMAKE tool function for wrapping a function with `this` bound to `thisArg`.
- *
- * **Why use wrap, not `fn.bind`?**
- * - because after some testing, calling bound functions takes about 20 times more time than wrapped ones.
- *   - this phenomenon won't show up on the first round, but will show up on the second round and later.(pretty weird😕)
- * - engines will automatically inline the wrapped function, but won't inline bound functions. Cost of mantaining `[[BoundTargetFunction]]`, `[[BoundArguments]]` and `[[BoundThis]]` might be huge.
- * @param thisArg `this`
- * @param target target function
- * @returns a wrapped function with `this` bound to `thisArg`
- */
-export function wrap<T extends AnyFn>(thisArg: any, target: T): T {
-  const fn = ((...args) => target.apply(thisArg, args)) as T;
-  $define(fn, {
-    length: { value: target.length, configurable: true },
-    name: { value: target.name, configurable: true },
-  });
-  return fn;
-}
-
 /**
  * ## Usage
  * **This package trusts you and won't do any argument check**, it is for minimizing and performance.
@@ -55,6 +33,8 @@ export class EventBus<T extends Record<string, AnyFn> = Record<string, AnyFn>> {
    */
   private readonly _limitMap = new Map<T[keyof T], T[keyof T]>();
 
+  private _cleanList = new Set<AnyFn>();
+
   private _getListeners(event: keyof T): T[keyof T][] {
     const listeners = this._listeners.get(event);
     if (listeners) {
@@ -73,8 +53,7 @@ export class EventBus<T extends Record<string, AnyFn> = Record<string, AnyFn>> {
    * @param listener handler
    * @param limit (optional) an integer, indicates the number of calls of this listener.(falsy values are considered as `Infinity`)
    * @returns the index of the listener in the internal array
-   * - this can be used to locate the return value of `emit`
-   * - be aware that the index of the listener will change when you use `off`
+   * - be aware that the index is not always
    */
   on<K extends keyof T>(event: K, listener: T[K], limit?: number): number {
     const listeners = this._getListeners(event);
@@ -82,16 +61,15 @@ export class EventBus<T extends Record<string, AnyFn> = Record<string, AnyFn>> {
       const origin = listener;
       let count = limit;
       listener = ((...args) => {
-        // & judge first means reaching 0 will not affect the current call but will affect the next call
-        if (count <= 0) {
-          const index = listeners.indexOf(listener);
-          if (index !== -1) {
-            listeners.splice(index, 1);
-            return true;
-          }
-        }
         count--;
-        return origin(...args);
+        const result = origin(...args);
+        if (count <= 0) {
+          // & cannot use `listeners.splice` here, because the index might
+          // have changed, and the array might have been changed by
+          // `filter` calls while cleaning.
+          this._cleanList.add(listener);
+        }
+        return result;
       }) as typeof listener;
       this._limitMap.set(origin, listener);
     }
@@ -105,8 +83,8 @@ export class EventBus<T extends Record<string, AnyFn> = Record<string, AnyFn>> {
    * @param listener handler
    * @returns `true` when successfully removed. `false` when not found or otherwise
    */
-  off<K extends keyof T>(event: K, fn?: T[K]): boolean {
-    if (!fn) {
+  off<K extends keyof T>(event: K, listener?: T[K]): boolean {
+    if (!listener) {
       return this._listeners.delete(event);
     }
     const listeners = this._listeners.get(event);
@@ -114,9 +92,13 @@ export class EventBus<T extends Record<string, AnyFn> = Record<string, AnyFn>> {
       return false;
     }
 
-    fn = (this._limitMap.get(fn) || fn) as T[K];
+    const origin = this._limitMap.get(listener);
+    if (origin) {
+      listener = origin as T[K];
+      this._limitMap.delete(origin);
+    }
 
-    const index = listeners.indexOf(fn);
+    const index = listeners.indexOf(listener);
     if (index !== -1) {
       listeners.splice(index, 1);
       return true;
@@ -137,30 +119,40 @@ export class EventBus<T extends Record<string, AnyFn> = Record<string, AnyFn>> {
       return [];
     }
 
-    return listeners.map((fn) => fn(...args));
+    const result = listeners.map((fn) => fn(...args));
+
+    if (this._cleanList.size === 0) {
+      return result;
+    }
+
+    // clean the listeners that have reached their limit after execution
+    this._listeners.set(
+      event,
+      listeners.filter((fn) => !this._cleanList.has(fn))
+    );
+
+    this._cleanList.clear();
+    return result;
   }
 
   /**
-   * Gets a wrapped `emit` function that can be used directly.
-   * - `name` and `length` are preserved.
+   * Gets an `emit` function that can be used directly.
    */
   getEmitFn(): typeof this.emit {
-    return wrap(this, this.emit);
+    return ((...args) => this.emit.apply(this, args)) as typeof this.emit;
   }
 
   /**
-   * Gets a wrapped `on` function that can be used directly.
-   * - `name` and `length` are preserved.
+   * Gets an `on` function that can be used directly.
    */
   getOnFn(): typeof this.on {
-    return wrap(this, this.on);
+    return ((...args) => this.on.apply(this, args)) as typeof this.on;
   }
 
   /**
-   * Gets a wrapped `off` function that can be used directly.
-   * - `name` and `length` are preserved.
+   * Gets an `off` function that can be used directly.
    */
   getOffFn(): typeof this.off {
-    return wrap(this, this.off);
+    return ((...args) => this.off.apply(this, args)) as typeof this.off;
   }
 }
