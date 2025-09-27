@@ -47,11 +47,6 @@ const options = [
         format: 'esm',
         sourcemap: false,
       },
-      {
-        file: 'dist/index.cjs',
-        format: 'commonjs',
-        sourcemap: false,
-      },
     ],
 
     plugins: [

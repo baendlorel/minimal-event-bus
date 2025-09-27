@@ -1,6 +1,6 @@
 type AnyFn = (...args: any[]) => any;
 
-const $define = Object.defineProperty;
+const $define = Object.defineProperties;
 
 /**
  * OMAKE tool function for wrapping a function with `this` bound to `thisArg`.
@@ -15,8 +15,10 @@ const $define = Object.defineProperty;
  */
 export function wrap<T extends AnyFn>(thisArg: any, target: T): T {
   const fn = ((...args) => target.apply(thisArg, args)) as T;
-  $define(fn, 'length', { value: target.length, configurable: true });
-  $define(fn, 'name', { value: target.name, configurable: true });
+  $define(fn, {
+    length: { value: target.length, configurable: true },
+    name: { value: target.name, configurable: true },
+  });
   return fn;
 }
 
@@ -69,7 +71,7 @@ export class EventBus<T extends Record<string, AnyFn> = Record<string, AnyFn>> {
    * - one function can be registered multiple times, and will be called multiple times.
    * @param event event name string
    * @param listener handler
-   * @param limit (optional) an integer, indicates the number of calls of this listener.
+   * @param limit (optional) an integer, indicates the number of calls of this listener.(falsy values are considered as `Infinity`)
    * @returns the index of the listener in the internal array
    * - this can be used to locate the return value of `emit`
    * - be aware that the index of the listener will change when you use `off`

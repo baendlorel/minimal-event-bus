@@ -1,13 +1,13 @@
 {
 	"name": "minimal-event-bus",
-	"version": "0.0.1",
+	"version": "1.0.0",
 	"author": {
 		"name": "Kasukabe Tsumugi",
 		"email": "futami16237@gmail.com"
 	},
-	"purpose": "A minimal event bus, it's emit and on method can be used outside the class instance.",
-	"description": "minimal-event-bus",
-	"description_zh": "minimal-event-bus",
+	"purpose": "npm",
+	"description": "A minimal event bus, it's on, off and emit method can be used outside the class instance.",
+	"description_zh": "一个极简的事件总线库，emit、on、off 方法可以在类实例外使用。",
 	"type": "module",
 	"module": "./dist/index.mjs",
 	"types": "./dist/index.d.ts",

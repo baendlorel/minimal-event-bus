@@ -109,14 +109,18 @@ describe('EventBus', () => {
       expect(mockFn).toHaveBeenCalledTimes(1);
     });
 
-    it('should handle limited listener with limit 0', () => {
+    it('should handle limited listener with limit 0 or other falsy values', () => {
       const eventBus = new EventBus<TestEvents>();
       const mockFn = vi.fn();
 
       eventBus.on('simpleEvent', mockFn, 0);
-
       eventBus.emit('simpleEvent');
-      expect(mockFn).toHaveBeenCalledTimes(0);
+      expect(mockFn).toHaveBeenCalledTimes(1);
+
+      const mockFn2 = vi.fn();
+      eventBus.on('simpleEvent', mockFn2, null as any);
+      eventBus.emit('simpleEvent');
+      expect(mockFn2).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -400,7 +404,7 @@ describe('EventBus', () => {
       eventBus.emit('simpleEvent');
 
       expect(mockFn1).toHaveBeenCalledOnce();
-      expect(mockFn2).toHaveBeenCalledOnce();
+      expect(mockFn2).toHaveBeenCalledTimes(0); // because the off listener executes ahead of mockFn2
     });
 
     it('should handle large number of listeners', () => {
