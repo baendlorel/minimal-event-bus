@@ -2,12 +2,17 @@ type AnyFn = (...args: any[]) => any;
 
 /**
  * ## Usage
- * **This package trusts you and won't do any argument check**, it is for minimizing and performance.
+ * This package trusts you and **will not validate arguments**, it is for minimalizing and performance.
  *
- * ##
+ * It is recommended to define your event types and get full type hint!
+ *
  * __PKG_INFO__
  */
 export class EventBus<T extends Record<string, AnyFn>> {
+  /**
+   * Create an EventBus instance and return its methods bound to it.
+   * - Binding is done using wrapper functions to avoid performance loss from `Function.prototype.bind`.
+   */
   public static create<T extends Record<string, AnyFn>>() {
     const bus = new EventBus<T>();
     return {
@@ -25,16 +30,25 @@ export class EventBus<T extends Record<string, AnyFn>> {
    * 2. `Map` is much faster(about 4~5 times).
    *    - both 1e6 key-value pairs, iterate 1e6 times,null object takes 200ms at average while `Map` takes only 40ms.
    *    - both 10 key-value pairs, iterate 1e6 times,null object takes 40ms at average while `Map` takes only 12ms.
+   * @internal
    */
   private readonly _listeners = new Map<keyof T, T[keyof T][]>();
 
   /**
    * For listeners with calling limit. Make them able to call `off` with the original function reference.
+   * @internal
    */
   private readonly _limitMap = new Map<T[keyof T], T[keyof T]>();
 
+  /**
+   * Save the listeners that have reached their limit and need to be cleaned after `emit`.
+   * @internal
+   */
   private _cleanList = new Set<AnyFn>();
 
+  /**
+   * @internal
+   */
   private _getListeners(event: keyof T): T[keyof T][] {
     const listeners = this._listeners.get(event);
     if (listeners) {

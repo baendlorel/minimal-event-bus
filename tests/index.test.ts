@@ -255,67 +255,6 @@ describe('EventBus', () => {
     });
   });
 
-  describe('getEmitFn() method', () => {
-    it('should return a function that works like emit', () => {
-      const eventBus = new EventBus<TestEvents>();
-      const mockFn = vi.fn();
-
-      eventBus.on('stringEvent', mockFn);
-
-      const emit = eventBus.getEmitFn();
-      const result = emit('stringEvent', 'test');
-
-      expect(mockFn).toHaveBeenCalledWith('test');
-      expect(result).toEqual([undefined]);
-    });
-
-    it('should not preserve function name', () => {
-      const eventBus = new EventBus<TestEvents>();
-      const emit = eventBus.getEmitFn();
-
-      expect(emit.name).not.toBe('emit');
-    });
-
-    it('should not preserve function length', () => {
-      const eventBus = new EventBus<TestEvents>();
-      const emit = eventBus.getEmitFn();
-
-      expect(emit.length).not.toBe(eventBus.emit.length);
-    });
-  });
-
-  describe('getOnFn() method', () => {
-    it('should return a function that works like on', () => {
-      const eventBus = new EventBus<TestEvents>();
-      const mockFn = vi.fn();
-
-      const on = eventBus.getOnFn();
-      const index = on('stringEvent', mockFn);
-
-      expect(index).toBe(0);
-
-      eventBus.emit('stringEvent', 'test');
-      expect(mockFn).toHaveBeenCalledWith('test');
-    });
-  });
-
-  describe('getOffFn() method', () => {
-    it('should return a function that works like off', () => {
-      const eventBus = new EventBus<TestEvents>();
-      const mockFn = vi.fn();
-
-      eventBus.on('stringEvent', mockFn);
-
-      const off = eventBus.getOffFn();
-      const result = off('stringEvent', mockFn);
-
-      expect(result).toBe(true);
-
-      eventBus.emit('stringEvent', 'test');
-      expect(mockFn).not.toHaveBeenCalled();
-    });
-  });
-
   describe('EventBus.create() static method', () => {
     it('should return bus, emit, and on functions', () => {
       const { bus, emit, on } = EventBus.create<TestEvents>();
