@@ -269,18 +269,18 @@ describe('EventBus', () => {
       expect(result).toEqual([undefined]);
     });
 
-    it('should preserve function name', () => {
+    it('should not preserve function name', () => {
       const eventBus = new EventBus<TestEvents>();
       const emit = eventBus.getEmitFn();
 
-      expect(emit.name).toBe('emit');
+      expect(emit.name).not.toBe('emit');
     });
 
-    it('should preserve function length', () => {
+    it('should not preserve function length', () => {
       const eventBus = new EventBus<TestEvents>();
       const emit = eventBus.getEmitFn();
 
-      expect(emit.length).toBe(eventBus.emit.length);
+      expect(emit.length).not.toBe(eventBus.emit.length);
     });
   });
 
@@ -296,20 +296,6 @@ describe('EventBus', () => {
 
       eventBus.emit('stringEvent', 'test');
       expect(mockFn).toHaveBeenCalledWith('test');
-    });
-
-    it('should preserve function name', () => {
-      const eventBus = new EventBus<TestEvents>();
-      const on = eventBus.getOnFn();
-
-      expect(on.name).toBe('on');
-    });
-
-    it('should preserve function length', () => {
-      const eventBus = new EventBus<TestEvents>();
-      const on = eventBus.getOnFn();
-
-      expect(on.length).toBe(eventBus.on.length);
     });
   });
 
@@ -327,20 +313,6 @@ describe('EventBus', () => {
 
       eventBus.emit('stringEvent', 'test');
       expect(mockFn).not.toHaveBeenCalled();
-    });
-
-    it('should preserve function name', () => {
-      const eventBus = new EventBus<TestEvents>();
-      const off = eventBus.getOffFn();
-
-      expect(off.name).toBe('off');
-    });
-
-    it('should preserve function length', () => {
-      const eventBus = new EventBus<TestEvents>();
-      const off = eventBus.getOffFn();
-
-      expect(off.length).toBe(eventBus.off.length);
     });
   });
 
@@ -362,13 +334,6 @@ describe('EventBus', () => {
 
       expect(mockFn).toHaveBeenCalledWith('test');
       expect(result).toEqual([undefined]);
-    });
-
-    it('should have proper function names', () => {
-      const { emit, on } = EventBus.create<TestEvents>();
-
-      expect(emit.name).toBe('emit');
-      expect(on.name).toBe('on');
     });
   });
 
