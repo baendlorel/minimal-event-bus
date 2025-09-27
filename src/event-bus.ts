@@ -3,19 +3,38 @@ type AnyFn = (...args: any[]) => any;
 const $define = Object.defineProperty;
 
 /**
+ * OMAKE tool function for wrapping a function with `this` bound to `thisArg`.
+ *
+ * **Why use wrap, not `fn.bind`?**
+ * - because after some testing, calling bound functions takes about 20 times more time than wrapped ones.
+ *   - this phenomenon won't show up on the first round, but will show up on the second round and later.(pretty weird😕)
+ * - engines will automatically inline the wrapped function, but won't inline bound functions. Cost of mantaining `[[BoundTargetFunction]]`, `[[BoundArguments]]` and `[[BoundThis]]` might be huge.
+ * @param thisArg `this`
+ * @param target target function
+ * @returns a wrapped function with `this` bound to `thisArg`
+ */
+export function wrap<T extends AnyFn>(thisArg: any, target: T): T {
+  const fn = ((...args) => target.apply(thisArg, args)) as T;
+  $define(fn, 'length', { value: target.length, configurable: true });
+  $define(fn, 'name', { value: target.name, configurable: true });
+  return fn;
+}
+
+/**
  * ## Usage
  * **This package trusts you and won't do any argument check**, it is for minimizing and performance.
  *
  * ##
  * __PKG_INFO__
  */
-export class EventBus<T extends Record<string, AnyFn>> {
+export class EventBus<T extends Record<string, AnyFn> = Record<string, AnyFn>> {
   public static create<T extends Record<string, AnyFn>>() {
     const bus = new EventBus<T>();
     return {
       bus,
-      emit: bus.getEmitFn(),
       on: bus.getOnFn(),
+      off: bus.getOffFn(),
+      emit: bus.getEmitFn(),
     };
   }
 
@@ -124,10 +143,7 @@ export class EventBus<T extends Record<string, AnyFn>> {
    * - `name` and `length` are preserved.
    */
   getEmitFn(): typeof this.emit {
-    const emit: typeof this.emit = (...args) => this.emit(...args);
-    $define(emit, 'length', { value: this.emit.length, configurable: true });
-    $define(emit, 'name', { value: 'emit', configurable: true });
-    return emit;
+    return wrap(this, this.emit);
   }
 
   /**
@@ -135,10 +151,7 @@ export class EventBus<T extends Record<string, AnyFn>> {
    * - `name` and `length` are preserved.
    */
   getOnFn(): typeof this.on {
-    const on: typeof this.on = (...args) => this.on(...args);
-    $define(on, 'length', { value: this.on.length, configurable: true });
-    $define(on, 'name', { value: 'on', configurable: true });
-    return on;
+    return wrap(this, this.on);
   }
 
   /**
@@ -146,9 +159,6 @@ export class EventBus<T extends Record<string, AnyFn>> {
    * - `name` and `length` are preserved.
    */
   getOffFn(): typeof this.off {
-    const off: typeof this.off = (...args) => this.off(...args);
-    $define(off, 'length', { value: this.off.length, configurable: true });
-    $define(off, 'name', { value: 'off', configurable: true });
-    return off;
+    return wrap(this, this.off);
   }
 }
